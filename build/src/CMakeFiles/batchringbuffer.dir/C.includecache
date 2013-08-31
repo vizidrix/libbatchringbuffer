@@ -1,0 +1,38 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/src/batchringbuffer.c
+stdlib.h
+-
+stdint.h
+-
+assert.h
+-
+time.h
+-
+errno.h
+-
+sched.h
+-
+batchringbuffer.h
+/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/src/batchringbuffer.h
+
+/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/src/batchringbuffer.h
+stdarg.h
+-
+stdlib.h
+-
+stdint.h
+-
+stdio.h
+-
+time.h
+-
+batchringbuffer.c
+/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/src/batchringbuffer.c
+

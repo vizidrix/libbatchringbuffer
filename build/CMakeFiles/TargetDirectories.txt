@@ -1,0 +1,4 @@
+/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/build/src/CMakeFiles/batchringbuffer.dir
+/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/build/test/CMakeFiles/batchringbuffer_test.dir
+/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/build/example/CMakeFiles/example_c.dir
+/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/build/CMakeFiles/uninstall.dir

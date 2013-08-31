@@ -1,0 +1,145 @@
+# ----------------------------------------------------------------
+#
+#	ringbuffer makefile
+#
+# ----------------------------------------------------------------
+
+#NAME		=	ringbuffer
+NAME		=	main
+
+LIBNAME		=	lib$(NAME).so
+
+ARCHIVE		=	lib$(NAME).a
+
+OUT			=	a.out
+
+# ----------------------------------------------------------------
+
+DEBUG		=	-DDEBUG -ggdb
+
+THREADS		=	-pthread
+
+OPT 		=	-O2 -g -D_REENTRANT
+
+ERR			=	-W -Wall -Wno-unused-parameter -Wbad-function-cast
+
+INC_PATH	=	-I.
+
+LIB_PATH	=	
+
+# ----------------------------------------------------------------
+
+CC 			=	gcc
+
+LD			=	ld
+
+AR 			=	ar rc
+
+RANLIB		=	ranlib
+
+RM 			=	rm -f
+
+# Adds dependent libraries eg: "-lm" would be libm (math)
+LIBS		=	-lm
+
+# $(XCFLAGS) $(THREADS)
+CC_FLAGS	=	$(INC_PATH) $(DEBUG) $(OPT) $(ERR) -fPIC
+
+#LD_FLAGS	=	$(LIB_PATH) $(LIBS) -shared -soname=$(LIBNAME)
+LD_FLAGS	=	$(LIB_PATH) $(LIBS)
+
+# ----- FILES ----------------------------------------------------
+
+SRC			=	$(wildcard *.c)
+
+OBJ 		=	$(patsubst %.c, %.o, $(wildcard *.c))
+
+# ----- TARGETS --------------------------------------------------
+
+all: $(LIBNAME)
+
+.PHONY: all clean check
+
+$(ARCHIVE): $(OBJ)
+	$(AR) $(ARCHIVE) $^
+	$(RANLIB) $(ARCHIVE)
+
+$(LIBNAME): $(ARCHIVE)
+
+	$(LD) $(LD_FLAGS) -o $@
+	#$(LD) $(LD_FLAGS) --whole-archive $< --no-whole-archive -o $@
+
+.c.o: $(SRC)
+
+	$(CC) $(CC_FLAGS) -o $@ -c $<
+
+clean:
+
+	[ -f $(LIBNAME) ] && $(RM) $(LIBNAME) 	|| [ 1 ]
+
+	[ -f $(ARCHIVE) ] && $(RM) $(ARCHIVE) 	|| [ 1 ]
+
+	[ -f $(OBJ) 	] && $(RM) $(OBJ)		|| [ 1 ]
+
+	[ -f $(OUT) 	] && $(RM) $(OUT)		|| [ 1 ]
+
+	cd test && make clean
+
+check: $(LIBNAME)
+
+	cd test && make && make check
+
+#batchringbuffer.o: batchringbuffer.c batchringbuffer.h
+#	$(CC) $(CC_FLAGS) -c batchringbuffer.c
+
+
+# Package MAIN
+#lib$(MAIN).a: main.o
+#	$(AR) lib$(MAIN).a %^
+#	$(RANLIB) lib$(MAIN).a
+
+#$(MAIN): lib$(MAIN).a
+#	$(LD) $(LD_FLAGS) -o $@
+
+
+#$(CC) $(CC_FLAGS) -o batchringbuffer.o -c batchringbuffer.c
+
+#batchringbuffer: batchringbuffer.a
+#	$(LD) $(LD_FLAGS) -o libbatchringbuffer.so
+
+#batchringbuffer.a: batchringbuffer.o
+#	$(AR) batchringbuffer.a $^
+#	$(RANLIB) batchringbuffer.a
+
+#lib$(BATCH_RING_BUFFER).a: $(BATCH_RING_BUFFER).o
+
+
+
+#.PHONY: default all clean
+
+#default: $(TARGET)
+#all: default
+
+#HEADERS = $(wildcard *.h)
+#OBJECTS = $(patsubst %.c, %.o, $(wildcard *.c))
+#OBJECTS = $(wildcard *.c)
+
+#%.o: %.c $(HEADERS)
+#	$(CC) $(CFLAGS) -c %< -o $@
+
+#.PRECIOUS: $(TARGET) $(OBJECTS)
+
+#$(TARGET): $(OBJECTS)
+#	$(CC) $(OBJECTS) $(CFLAGS) $(LIBS) $(THREADS)
+
+#clean:
+#	-rm -f *.o
+#	-rm -f $(TARGET)
+
+#ringbuffer: ringbuffer.c
+#	$(CC) ringbuffer.c -o ringbuffer
+
+#make ringbuffer
+#cc     ringbuffer.c   -o ringbuffer
+
+## -o $@ -I

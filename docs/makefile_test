@@ -1,0 +1,66 @@
+# ----------------------------------------------------------------
+#
+#	ringbuffer unit-test makefile
+#
+# ----------------------------------------------------------------
+
+TARGET_NAME		=	ringbuffer
+
+TARGET_SRC		=	../batchringbuffer.c
+
+
+OPT				=	-O2 -fprofile-arcs -ftest-coverage
+
+ERR				=	-Wall
+
+INC_PATH		=	-I. -I..
+
+LIB_PATH		=	-L..
+
+LD_PATH			=	..
+
+# ----------------------------------------------------------------
+
+CC				=	gcc
+
+RM				=	rm -f
+
+
+# NOTE: check libs must be enclosed by --whole-archive directives
+
+CHECK_LIBS		=	-Wl,--whole-archive -lcheck -Wl,--no-whole-archive
+
+LIBS 			=	-lm $(CHECK_LIBS)
+
+# NOTE: UNIT_TEST enables the static-function test case in batchrinbbuffer.c
+
+CC_FLAGS		=	$(INC_PATH) $(OPT) $(ERR) -DUNIT_TEST
+
+# NOTE: check libs must be enclosed by --while-archive directives
+
+LD_FLAGS		=	$(LIB_PATH)
+
+# ----- TEST DEFINITIONS -----------------------------------------
+
+TESTS			=	
+
+
+# ----- TARGETS --------------------------------------------------
+
+all: $(TESTS)
+
+.PHONY:	all clean check
+
+
+clean:
+
+	$(RM) $(TESTS) *.gcno *gcda
+
+
+check:
+
+	@for t in $(TESTS); do 								\
+
+		LD_LIBRARY_PATH='$(LD_PATH)' ./$$t;				\
+
+	done

@@ -1,0 +1,2 @@
+/usr/bin/ar cr ../lib/libbatchringbuffer.a  CMakeFiles/batchringbuffer.dir/batchringbuffer.c.o
+/usr/bin/ranlib ../lib/libbatchringbuffer.a
