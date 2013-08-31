@@ -1,1 +1,0 @@
-/usr/bin/cc     -pedantic-errors -Wall -pedantic -Wextra -std=c99 -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names   CMakeFiles/example_c.dir/example.c.o  -o ../bin/example_c  ../lib/libbatchringbuffer.a 
