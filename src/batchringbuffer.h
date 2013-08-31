@@ -93,7 +93,9 @@ typedef struct brb_buffer brb_buffer;
 
 #define BRB_WRITE_BUFFER_FULL			(BRB_ERROR - 302)		/** Insufficient room in buffer to claim batch */
 
-#define BRB_RELEASE_OVERFLOW			(BRB_ERROR - 400)		/** Requested batch release was out of order */
+#define BRB_RELEASE_UNPUBLISHED			(BRB_ERROR - 400)		/** Requested batch was not yet published */
+#define BRB_RELEASE_OVERFLOW			(BRB_ERROR - 401)		/** Requested batch release was out of order */
+#define BRB_ALREADY_RELEASED			(BRB_ERROR - 402)		/** Requested batch release was already released */
 
 extern void brb_reset_batch(brb_batch * batch);
 

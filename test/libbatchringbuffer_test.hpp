@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+/*
 TEST(BatchRingBufferTest, Should_not_pass)
 {
 	brb_buffer * buffer;
@@ -40,3 +41,4 @@ TEST(BatchRingBufferTest, Should_not_pass3)
 
 	//EXPECT_EQ(1, batch->batch_size) << "Batch size was " << batch->batch_size;
 }
+*/

@@ -1,3 +1,4 @@
+#include <test/given_a_4_4_4_batch_ring_buffer.hpp>
 #include <test/libbatchringbuffer_test.hpp>
 #include "gtest/gtest.h"
 
@@ -54,6 +55,7 @@ class TersePrinter : public EmptyTestEventListener {
     fflush(stdout);
   }
 };  // class TersePrinter
+
 /*
 TEST(CustomOutputTest, PrintsMessage) {
   printf("Printing something from the test body...\n");
@@ -68,6 +70,7 @@ TEST(CustomOutputTest, Fails) {
       << "This test fails in order to demonstrate alternative failure messages";
 }
 */
+
 }  // namespace
 
 int main(int argc, char **argv) {

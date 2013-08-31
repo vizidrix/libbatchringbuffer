@@ -18,6 +18,8 @@
  ****************************************************************************/
 
 #define __errno(err) if(errno == BRB_SUCCESS) { errno = err; }
+#define __success() if(errno != BRB_SUCCESS) { errno = BRB_SUCCESS; }
+
 #define SLEEPNS(nsec) 														\
 	if (0 < nsec && nsec < 9999999L) {										\
 		struct timespec ts;													\
@@ -65,6 +67,7 @@ brb_reset_batch(struct brb_batch * batch) {
 	batch->group_flags = 0x00000000; /* Same as: no groups completed */
 	batch->seq_num = 0xFFFFFFFF; /* Buffer process should ignore 0xFFFFFFFF */
 	batch->batch_size = 0; /* On claim this will set to > 0 and seq_num == 0 */
+	__success(); return;
 }
 
 void
@@ -116,12 +119,11 @@ brb_init_buffer(struct brb_buffer** buffer_ptr, uint64_t batch_buffer_size, uint
 	for (i = 0; i < (*buffer_ptr)->info.total_data_size; i++) {
 		(*buffer_ptr)->data_buffer[i] = 0;
 	}
-	__errno(BRB_SUCCESS);
+	__success();
 	return;
 error:
-	printf("ERROR IN CREATE BUFFER");
-	__errno(BRB_ERROR);
 	brb_free_buffer(buffer_ptr);
+	__errno(BRB_ERROR); return;
 }
 
 void
@@ -131,6 +133,7 @@ brb_free_buffer(struct brb_buffer ** buffer) {
 		free((*buffer)->batches);
 		(*buffer)=(free(*buffer),NULL);
 	}
+	__success(); return;
 }
 
 /* WIP - Working to move the responsibility of managing these points into the callers
@@ -243,7 +246,7 @@ brb_publish(brb_buffer * buffer, brb_batch * batch) {
 	batch->state = PUBLISHED;
 	/*BARRIER(); */
 	if(batch->batch_num != buffer->stats.read_batch_num) {
-		return; /* All done here */
+		__success(); return; /* All done here */
 	}
 	index = batch->batch_num;
 	do {
@@ -254,21 +257,23 @@ brb_publish(brb_buffer * buffer, brb_batch * batch) {
 	/* Handle a potential edge case where the next batch was published and returned in between
 	 	the prev while and the CAS.  Should be very rare, if ever */
 	} while(buffer->batches[(index) & buffer->info.batch_size_mask].state == PUBLISHED);
+	__success(); return;
 }
 
 void
 brb_release(brb_buffer * buffer, brb_batch * batch) {
-	if(batch->state != PUBLISHED || batch->batch_num >= buffer->stats.read_batch_num) {
+	if(batch->state != PUBLISHED) {
+		__errno(BRB_RELEASE_UNPUBLISHED); goto error;
+	}
+	if(batch->batch_num >= buffer->stats.read_batch_num) {
 		__errno(BRB_RELEASE_OVERFLOW); goto error;
 	}
 	brb_reset_batch(batch);
 
 	__sync_add_and_fetch(&buffer->stats.barrier_batch_num, 1);
-	__errno(BRB_SUCCESS);
-	return;
+	__success(); return;
 error:
-	__errno(BRB_ERROR);
-	return;
+	__errno(BRB_ERROR); return;
 }
 
 
@@ -277,8 +282,7 @@ brb_claim(brb_buffer * buffer, uint16_t count, void* cancel) {
 	uint64_t index, iterations;
 
 	if(count == 0 || count > buffer->info.data_buffer_size) {
-		__errno(BRB_CLAIM_PANIC);
-		goto error;
+		__errno(BRB_CLAIM_PANIC); goto error;
 	} /* Must be > 0 and < buffer size */
 	index = buffer->stats.write_batch_num;
 	iterations = 0;
@@ -288,10 +292,10 @@ brb_claim(brb_buffer * buffer, uint16_t count, void* cancel) {
 		!__sync_bool_compare_and_swap(&buffer->batches[index++ & buffer->info.batch_size_mask].batch_size, 0, count)) {
 		sched_yield();
 		SLEEPNS(1000L);
-		if(iterations++>=1000) {
-			__errno(BRB_ERROR);
-			return NULL;
-		}
+		//if(iterations++>=1000) {
+		//	__errno(BRB_ERROR);
+		//	return NULL;
+		//}
 
 		if(__builtin_expect(cancel == NULL, 0)) { __errno(BRB_CLAIM_CANCELED); goto error; }
 	}
@@ -316,8 +320,7 @@ brb_claim(brb_buffer * buffer, uint16_t count, void* cancel) {
 	//buffer->stats.barrier_batch_num++;
 	*/
 
-	__errno(BRB_SUCCESS);
-	return &buffer->batches[index & buffer->info.batch_size_mask];
+	__success(); return &buffer->batches[index & buffer->info.batch_size_mask];
 
 	/*
 	rb_process(buffer);
@@ -350,18 +353,17 @@ brb_claim(brb_buffer * buffer, uint16_t count, void* cancel) {
 	//buffer->stats->write_seq_num += count;
 	*/
 error:
-	__errno(BRB_ERROR);
-	return NULL;
+	__errno(BRB_ERROR); return NULL;
 }
 
 brb_batch *
 brb_get_batch(brb_buffer * buffer, uint64_t batch_num) {
-	return &buffer->batches[batch_num & buffer->info.batch_size_mask];
+	__success(); return &buffer->batches[batch_num & buffer->info.batch_size_mask];
 }
 
 void *
 brb_get_entry(brb_buffer * buffer, uint64_t seq_num) {
-	return &buffer->data_buffer[seq_num & buffer->info.data_size_mask];
+	__success(); return &buffer->data_buffer[seq_num & buffer->info.data_size_mask];
 }
 
 /*
@@ -401,12 +403,12 @@ void rb_claim_and_publish(rb_buffer * buffer, int count) {
 
 brb_buffer_info * 
 brb_get_info(brb_buffer * buffer) {
-	return &buffer->info;
+	__success(); return &buffer->info;
 }
 
 brb_buffer_stats * 
 brb_get_stats(brb_buffer * buffer) {
-	return &buffer->stats;
+	__success(); return &buffer->stats;
 }
 
 #define puint64_t (%" PRIu64 ")
@@ -417,6 +419,7 @@ brb_print_info(brb_buffer * buffer) {
 			buffer->info.data_buffer_size,
 			buffer->info.entry_size,
 			buffer->info.total_data_size);
+	__success(); return;
 }
 
 void
@@ -427,6 +430,7 @@ brb_print_stats(brb_buffer * buffer) {
 			buffer->stats.write_batch_num,
 			buffer->stats.barrier_seq_num,
 			buffer->stats.write_seq_num);
+	__success(); return;
 }
 
 void
@@ -434,4 +438,5 @@ brb_print_buffer(brb_buffer * buffer) {
 	printf("Buffer - Info | Stats | Batches | Data");
 	brb_print_info(buffer);
 	brb_print_stats(buffer);
+	__success(); return;
 }
