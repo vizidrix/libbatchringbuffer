@@ -1,4 +1,4 @@
-#include <test/batchringbuffer_test.hpp>
+#include <test/libbatchringbuffer_test.hpp>
 #include "gtest/gtest.h"
 
 using ::testing::EmptyTestEventListener;
@@ -54,7 +54,7 @@ class TersePrinter : public EmptyTestEventListener {
     fflush(stdout);
   }
 };  // class TersePrinter
-
+/*
 TEST(CustomOutputTest, PrintsMessage) {
   printf("Printing something from the test body...\n");
 }
@@ -67,13 +67,13 @@ TEST(CustomOutputTest, Fails) {
   EXPECT_EQ(1, 2)
       << "This test fails in order to demonstrate alternative failure messages";
 }
-
+*/
 }  // namespace
 
 int main(int argc, char **argv) {
   InitGoogleTest(&argc, argv);
 
-  bool terse_output = true;
+  bool terse_output = false;
   if (argc > 1 && strcmp(argv[1], "--terse_output") == 0 )
     terse_output = true;
   else

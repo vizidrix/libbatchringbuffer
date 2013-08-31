@@ -1,6 +1,6 @@
 set(TITLE example_c)
 
-set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99" )
+set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -pthread -D_REENTRANT -fPIC" )
 set(SOURCES example.c)
 
 add_executable(${TITLE} ${SOURCES})

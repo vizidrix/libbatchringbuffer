@@ -1,4 +1,4 @@
-set(TITLE batchringbuffer_test)
+set(TITLE libbatchringbuffer_test)
 
 set(SOURCES test.cpp)
 
