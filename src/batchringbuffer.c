@@ -279,23 +279,18 @@ error:
 
 brb_batch *
 brb_claim(brb_buffer * buffer, uint16_t count, void* cancel) {
-	uint64_t index, iterations;
+	uint64_t index;
 
 	if(count == 0 || count > buffer->info.data_buffer_size) {
 		__errno(BRB_CLAIM_PANIC); goto error;
 	} /* Must be > 0 and < buffer size */
 	index = buffer->stats.write_batch_num;
-	iterations = 0;
 	/* Scan forward trying to put your count in the slot first */
 	/*DebugPrint("%d >= (%d + %d)", index, buffer->stats.barrier_batch_num, buffer->info.batch_buffer_size);*/
 	while(__builtin_expect(index >= (buffer->stats.barrier_batch_num + buffer->info.batch_buffer_size), 0) ||
 		!__sync_bool_compare_and_swap(&buffer->batches[index++ & buffer->info.batch_size_mask].batch_size, 0, count)) {
 		sched_yield();
 		SLEEPNS(1000L);
-		//if(iterations++>=1000) {
-		//	__errno(BRB_ERROR);
-		//	return NULL;
-		//}
 
 		if(__builtin_expect(cancel == NULL, 0)) { __errno(BRB_CLAIM_CANCELED); goto error; }
 	}
