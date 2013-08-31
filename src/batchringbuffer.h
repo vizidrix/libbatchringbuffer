@@ -76,12 +76,6 @@ typedef struct brb_reader {
 } brb_reader;
 */
 
-typedef struct brb_slice {
-	void *		data;
-	uint64_t	len;
-	uint64_t	cap;
-} brb_slice;
-
 typedef struct brb_buffer brb_buffer;
 
 #define BRB_SUCCESS 					0 						/** Successful result */
@@ -113,10 +107,6 @@ extern brb_process_result brb_process_all(brb_buffer * buffer);
 
 extern brb_batch * brb_get_batch(brb_buffer * buffer, uint64_t batch_num);
 extern void * brb_get_entry(brb_buffer * buffer, uint64_t seq_num);
-extern void * brb_get_entry_slice(brb_buffer * buffer, uint64_t seq_num);
-
-/* Just for testing latency of Go interop */
-extern void temp(brb_buffer * buffer, uint64_t count);
 
 /* This will block until the batch is claimed */
 extern brb_batch * brb_claim(brb_buffer * buffer, uint16_t count, void* cancel);
@@ -149,27 +139,6 @@ extern void brb_unsubscribe(brb_reader * reader);
 extern brb_buffer_info * brb_get_info(brb_buffer * buffer);
 extern brb_buffer_stats * brb_get_stats(brb_buffer * buffer);
 
-
-#ifdef __extern_golang
-/* Hack to get referencing package to build */
-#include "batchringbuffer.c"
-char debug_out[2000];
-void vDebugPrint(const char* format, va_list args) {
-	vsprintf(debug_out, format, args);
-	DebugPrintf(debug_out);
-}
-#else
-void vDebugPrint(const char* format, va_list args) {
-	printf(format, args);
-}
-#endif
-
-void DebugPrint(const char* format, ...) {
-	va_list args;
-	va_start(args, format);
-	vDebugPrint(format, args);
-	va_end(args);
-}
 
 #ifdef __cplusplus
 }

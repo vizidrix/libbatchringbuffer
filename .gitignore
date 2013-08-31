@@ -1,4 +1,5 @@
 build/*
+CMakeFiles/*
 
 # Object files
 *.o
@@ -17,3 +18,37 @@ build/*
 *.exe
 *.out
 *.app
+
+CMakeCache.txt
+
+CTestTestfile.cmake
+
+Makefile
+
+Testing/Temporary/CTestCostData.txt
+
+Testing/Temporary/LastTest.log
+
+Testing/Temporary/LastTestsFailed.log
+
+bin/batchringbuffer_test
+
+cmake_install.cmake
+
+*.cmake
+
+*.make
+
+*.internal
+
+*.marks
+
+*.includecache
+
+test/CMakeFiles/batchringbuffer_test.dir/link.txt
+
+src/CMakeFiles/batchringbuffer.dir/link.txt
+
+example/CMakeFiles/example_c.dir/link.txt
+
+bin/example_c

@@ -4,12 +4,12 @@
 #include <time.h>
 #include <errno.h>
 #include <sched.h>
+#include <inttypes.h>
 
 #include "batchringbuffer.h"
 
 /*#include <xmmintrin.h> // SIMD */
 /*http://gcc.gnu.org/onlinedocs/gcc-4.1.2/gcc/Atomic-Builtins.html */
-
 
 /****************************************************************************
  *
@@ -37,21 +37,6 @@ uint64_t round_up_pow_2_uint64_t(uint64_t v) {
 	v++;
 	return v;
 }
-/*
-// cache line
-//#define ALIGN 64
-
-//void *aligned_malloc(int size) {
-//    void *mem = malloc(size+ALIGN+sizeof(void*));
-//    void **ptr = (void**)((long)(mem+ALIGN+sizeof(void*)) & ~(ALIGN-1));
-//    ptr[-1] = mem;
-//    return ptr;
-//}
-
-//void aligned_free(void *ptr) {
-//    free(((void**)ptr)[-1]);
-//}
-*/
 
 /* Compiler barrier to avoid rearranging of calls */
 #define BARRIER() { asm volatile("" ::: "memory"); }
@@ -66,7 +51,6 @@ struct brb_buffer {
 	struct brb_buffer_info		info;			/** < Holds buffer settings */
 	struct brb_buffer_stats		stats;			/** < Holds buffer allocation details */
 	brb_batch *					batches;
-	brb_slice *					slices;
 	uint8_t *					data_buffer;
 };
 
@@ -135,7 +119,7 @@ brb_init_buffer(struct brb_buffer** buffer_ptr, uint64_t batch_buffer_size, uint
 	__errno(BRB_SUCCESS);
 	return;
 error:
-	DebugPrint("ERROR IN CREATE BUFFER");
+	printf("ERROR IN CREATE BUFFER");
 	__errno(BRB_ERROR);
 	brb_free_buffer(buffer_ptr);
 }
@@ -143,7 +127,6 @@ error:
 void
 brb_free_buffer(struct brb_buffer ** buffer) {
 	if(*buffer != NULL) {
-		/*free((*buffer)->slices); -- may remove this */
 		free((*buffer)->data_buffer);
 		free((*buffer)->batches);
 		(*buffer)=(free(*buffer),NULL);
@@ -381,29 +364,6 @@ brb_get_entry(brb_buffer * buffer, uint64_t seq_num) {
 	return &buffer->data_buffer[seq_num & buffer->info.data_size_mask];
 }
 
-void *
-brb_get_entry_slice(brb_buffer * buffer, uint64_t seq_num) {
-	uint64_t i;
-	/* Initialize slice mem pool ** May be moved to go interop lib */
-	/*
-		TODO: find a more memory efficient/compact way of allocating this pool
-		TODO: As it stands there is a 24 byte overhead to every entry due to fixed sized pool
-	*/
-	if(buffer->slices == NULL) {
-		/* Lazy load the pool on first call since this is for Go interop
-			 and we don't want to use the mem unless it's needed */
-		buffer->slices = malloc(sizeof(brb_slice) * buffer->info.data_buffer_size);
-		for(i = 0; i < buffer->info.data_buffer_size; i++) {
-			buffer->slices[i].data = 0;
-			buffer->slices[i].len = buffer->info.entry_size;
-			buffer->slices[i].cap = buffer->info.entry_size;
-		}
-	}
-	/* With fixed pool size this should always be a safe operation */
-	buffer->slices[seq_num].data = brb_get_entry(buffer, seq_num);
-	return &buffer->slices[seq_num & buffer->info.data_size_mask];
-}
-
 /*
 void
 rb_publish(rb_buffer * buffer, rb_batch * batch) {
@@ -449,9 +409,10 @@ brb_get_stats(brb_buffer * buffer) {
 	return &buffer->stats;
 }
 
+#define puint64_t (%" PRIu64 ")
 void
 brb_print_info(brb_buffer * buffer) {
-	DebugPrint("C Info - Batch# [ %d ] Data# [ %d ] Entry# [ %d ] - Entry Buffer# [ %d ]",
+	printf("C Info - Batch# [ %" PRIu64 " ] Data# [ %" PRIu64 " ] Entry# [ %" PRIu64 " ] - Entry Buffer# [ %" PRIu64 " ]",
 			buffer->info.batch_buffer_size,
 			buffer->info.data_buffer_size,
 			buffer->info.entry_size,
@@ -460,7 +421,7 @@ brb_print_info(brb_buffer * buffer) {
 
 void
 brb_print_stats(brb_buffer * buffer) {
-	DebugPrint("C Stats - Batch [ B %d | R %d | W %d ] Seq [ B %d | W %d ]",
+	printf("C Stats - Batch [ B %" PRIu64 " | R %" PRIu64 " | W %" PRIu64 " ] Seq [ B %" PRIu64 " | W %" PRIu64 " ]",
 			buffer->stats.barrier_batch_num,
 			buffer->stats.read_batch_num,
 			buffer->stats.write_batch_num,
@@ -470,7 +431,7 @@ brb_print_stats(brb_buffer * buffer) {
 
 void
 brb_print_buffer(brb_buffer * buffer) {
-	DebugPrint("Buffer - Info | Stats | Batches | Data");
+	printf("Buffer - Info | Stats | Batches | Data");
 	brb_print_info(buffer);
 	brb_print_stats(buffer);
 }
