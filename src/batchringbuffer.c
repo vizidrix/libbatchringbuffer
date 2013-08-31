@@ -150,6 +150,8 @@ brb_free_buffer(struct brb_buffer ** buffer) {
 	}
 }
 
+/* WIP - Working to move the responsibility of managing these points into the callers
+			so these funcs will likely be deprecated...
 inline uint64_t
 brb_process_releases(brb_buffer * buffer) {
 	DebugPrint("Processing releases...");
@@ -171,22 +173,21 @@ brb_process_publishes(brb_buffer * buffer) {
 	return BRB_SUCCESS;
 }
 
-/* Working on pushing this responsibility into the callers... */
 inline brb_process_result
 brb_process_all(brb_buffer * buffer) {
 	brb_process_result result;
 
 	DebugPrint("Processing all...");
 	
-	/* First we want to free up any available batches/seqs */
+	/ First we want to free up any available batches/seqs /
 	result.releases = brb_process_releases(buffer);
-	/* Then we want to let writers start doing their work */
+	/ Then we want to let writers start doing their work /
 	result.claims = brb_process_claims(buffer);
-	/* Finally we release pubished batches to the reader pool */
+	/ Finally we release pubished batches to the reader pool /
 	result.publishes = brb_process_publishes(buffer);
 
 	goto error;
-	/*
+	/
 	// Release finished read batches -> make batch available for writers
 	// - Starting at 
 	// - Find batch(es) where group_flags == 0xFFFF and reset them
@@ -223,13 +224,13 @@ brb_process_all(brb_buffer * buffer) {
 			//DebugPrint("Set seq num[%d]: %d", i, buffer->batches[i].seq_num);
 		}
 	}
-	*/
+	/
 	return result;
 error:
 	__errno(BRB_ERROR);
 	return result;
 }
-
+*/
 /*
 void temp(brb_buffer * buffer, uint64_t count) {
 	//rb_buffer * buffer;

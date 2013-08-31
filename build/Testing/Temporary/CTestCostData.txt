@@ -1,2 +1,2 @@
-batchringbuffer_test 1 0.012444
+batchringbuffer_test 2 0.00657344
 ---

@@ -1,10 +1,10 @@
-Start testing: Aug 31 03:25 PDT
+Start testing: Aug 31 03:43 PDT
 ----------------------------------------------------------
 1/1 Testing: batchringbuffer_test
 1/1 Test: batchringbuffer_test
 Command: "/c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/build/bin/batchringbuffer_test"
 Directory: /c/vizidrix/src/github.com/vizidrix/libbatchringbuffer/build/test
-"batchringbuffer_test" start time: Aug 31 03:25 PDT
+"batchringbuffer_test" start time: Aug 31 03:43 PDT
 Output:
 ----------------------------------------------------------
 [==========] Running 1 test from 1 test case.
@@ -21,8 +21,8 @@ Output:
 Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"batchringbuffer_test" end time: Aug 31 03:25 PDT
+"batchringbuffer_test" end time: Aug 31 03:43 PDT
 "batchringbuffer_test" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-End testing: Aug 31 03:25 PDT
+End testing: Aug 31 03:43 PDT

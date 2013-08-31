@@ -1,6 +1,6 @@
 set(TITLE batchringbuffer)
 
-set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99" )
+set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -pthread -D_REENTRANT -fPIC" )
 set( SOURCES batchringbuffer.c )
 
 FILE( GLOB LIBCMDLINE_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h" )
