@@ -79,6 +79,21 @@ TEST_F(Given_a_4_batch_buffer, _when_release_is_called_out_of_order) {
 	EXPECT_EQ(BRB_RELEASE_OVERFLOW, errno) << "then it should return a release overflow error";
 }
 
+TEST_F(Given_a_4_batch_buffer, _when_claiming_batches_that_were_previously_released) {
+	brb_batch * batch1 = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch2 = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch3 = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch4 = brb_claim(buffer, 1, &cancel);
+	/* Buffer should be fully allocated now so without releasing, next claim will block */
+
+	brb_publish(buffer, batch1);
+	brb_release(buffer, batch1);
+
+	/* Need to figure out how to make sure this doesn't hang the tests */
+	brb_batch * batch5 = brb_claim(buffer, 1, &cancel);
+
+
+}
 
 
 /* when all batches are allocated then it should block... how to trigger cancel in C? */
