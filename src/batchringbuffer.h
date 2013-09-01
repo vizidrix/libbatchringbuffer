@@ -96,32 +96,27 @@ typedef struct brb_buffer brb_buffer;
 #define BRB_RELEASE_UNPUBLISHED			(BRB_ERROR - 400)		/** Requested batch was not yet published */
 #define BRB_RELEASE_OVERFLOW			(BRB_ERROR - 401)		/** Requested batch release was out of order */
 
-extern void brb_reset_batch(brb_batch * batch);
+extern int brb_reset_batch(brb_batch * batch);
 
-extern void brb_init_buffer(brb_buffer ** buffer_ptr, uint64_t batch_buffer_size, uint64_t data_buffer_size, uint64_t data_size);
-extern void brb_free_buffer(brb_buffer ** buffer);
+extern int brb_init_buffer(brb_buffer ** buffer_ptr, uint64_t batch_buffer_size, uint64_t data_buffer_size, uint64_t data_size);
+extern int brb_free_buffer(brb_buffer * buffer);
 
-extern uint64_t brb_proces_releases(brb_buffer * buffer);
-extern uint64_t brb_process_claims(brb_buffer * buffer);
-extern uint64_t brb_process_publishes(brb_buffer * buffer);
-extern brb_process_result brb_process_all(brb_buffer * buffer);
-
-extern brb_batch * brb_get_batch(brb_buffer * buffer, uint64_t batch_num);
-extern void * brb_get_entry(brb_buffer * buffer, uint64_t seq_num);
+extern int brb_get_batch(brb_buffer * buffer, brb_batch ** batch, uint64_t batch_num);
+extern int brb_get_entry(brb_buffer * buffer, void ** entry, uint64_t seq_num);
 
 /* This will block until the batch is claimed */
-extern brb_batch * brb_claim(brb_buffer * buffer, uint16_t count, void* cancel);
+extern int brb_claim(brb_buffer * buffer, brb_batch ** batch, uint16_t count, void* cancel);
 /*
 This is basically a trigger to clear the batch for processing by readers
 	- Readers will (should) process batches in claimed sequence
 	- Can watch state at this batch slot to tell when batch is finished writing
 	- Can put state info into batch data for readers
 */
-extern void brb_publish(brb_buffer * buffer, brb_batch * batch);
+extern int brb_publish(brb_buffer * buffer, brb_batch * batch);
 /*
 This is a trigger to update the batch's state flag
 */
-extern void brb_release(brb_buffer * buffer, brb_batch * batch);
+extern int brb_release(brb_buffer * buffer, brb_batch * batch);
 /*
 Registers a reader with the buffer
 	- Group num translates into group mask bit position
@@ -137,8 +132,8 @@ Frees the memory for the reader
 extern void brb_unsubscribe(brb_reader * reader);
 */
 
-extern brb_buffer_info * brb_get_info(brb_buffer * buffer);
-extern brb_buffer_stats * brb_get_stats(brb_buffer * buffer);
+extern int brb_get_info(brb_buffer * buffer, brb_buffer_info ** info);
+extern int brb_get_stats(brb_buffer * buffer, brb_buffer_stats ** info);
 
 
 #ifdef __cplusplus

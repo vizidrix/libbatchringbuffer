@@ -9,34 +9,43 @@ class Given_a_4_batch_buffer : public testing::Test {
 protected:
 	brb_buffer * buffer;
 	char cancel;
+	int result;
 
 	virtual void SetUp() {
 		cancel = 0;
+		result = 0;
 		brb_init_buffer(&buffer, 4, 4, 4);
 	}
 
 	virtual void TearDown() {
 		cancel = 0;
-		brb_free_buffer(&buffer);
+		result = 0;
+		brb_free_buffer(buffer);
 	}
 };
 
 TEST_F(Given_a_4_batch_buffer, _when_a_zero_sized_claim_is_requested) {
-	brb_batch * batch = brb_claim(buffer, 0, &cancel);
+	brb_batch * batch;
 
-	EXPECT_EQ(BRB_CLAIM_PANIC, errno) << "then it should have returned an error";
+	result = brb_claim(buffer, &batch, 0, &cancel);
+
+	EXPECT_EQ(BRB_CLAIM_PANIC, result) << "then it should have returned an error";
 }
 
 TEST_F(Given_a_4_batch_buffer, _when_a_claim_size_bigger_than_the_buffer_is_requested) {
-	brb_batch * batch = brb_claim(buffer, 5, &cancel);
+	brb_batch * batch;
 
-	EXPECT_EQ(BRB_CLAIM_PANIC, errno) << "then it should have returned an error";
+	result = brb_claim(buffer, &batch, 5, &cancel);
+
+	EXPECT_EQ(BRB_CLAIM_PANIC, result) << "then it should have returned an error";
 }
 
 TEST_F(Given_a_4_batch_buffer, _when_a_valid_single_claim_is_requested) {
-	brb_batch * batch = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch;
 
-	EXPECT_EQ(BRB_SUCCESS, errno) << "then it shouldn't have returned an error";
+	result = brb_claim(buffer, &batch, 1, &cancel);
+
+	EXPECT_EQ(BRB_SUCCESS, result) << "then it shouldn't have returned an error";
 	EXPECT_EQ(0, batch->batch_num) << "then it should have the correct batch num assigned";
 	EXPECT_EQ(1, batch->batch_size) << "then it should have the correct batch size";
 	EXPECT_EQ(0xFFFFFFFF, batch->seq_num) << "then the seq num should be masked out";
@@ -44,55 +53,73 @@ TEST_F(Given_a_4_batch_buffer, _when_a_valid_single_claim_is_requested) {
 }
 
 TEST_F(Given_a_4_batch_buffer, _when_two_valid_batches_are_claimed) {
-	brb_batch * batch1 = brb_claim(buffer, 1, &cancel);
-	brb_batch * batch2 = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch1;
+	brb_batch * batch2; 
+
+	brb_claim(buffer, &batch1, 1, &cancel);
+	brb_claim(buffer, &batch2, 1, &cancel);
 
 	EXPECT_EQ(0, batch1->batch_num) << "then it should have assigned batch num zero to the first batch";
 	EXPECT_EQ(1, batch2->batch_num) << "then it should have assigned batch num one to the second batch";
 }
 
 TEST_F(Given_a_4_batch_buffer, _when_release_is_called_on_unpublished_batch) {
-	brb_batch * batch = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch;
 
-	brb_release(buffer, batch);
+	brb_claim(buffer, &batch, 1, &cancel);
 
-	EXPECT_EQ(BRB_RELEASE_UNPUBLISHED, errno) << "then it should return a release unpublished error";
+	result = brb_release(buffer, batch);
+
+	EXPECT_EQ(BRB_RELEASE_UNPUBLISHED, result) << "then it should return a release unpublished error";
 }
 
 TEST_F(Given_a_4_batch_buffer, _when_release_is_called_on_already_released_batch) {
-	brb_batch * batch = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch;
+
+	brb_claim(buffer, &batch, 1, &cancel);
 
 	brb_publish(buffer, batch);
 	brb_release(buffer, batch);
-	brb_release(buffer, batch);
+	result = brb_release(buffer, batch);
 
-	EXPECT_EQ(BRB_RELEASE_UNPUBLISHED, errno) << "then it should return a released unpublished (already released) error";
+	EXPECT_EQ(BRB_RELEASE_UNPUBLISHED, result) << "then it should return a released unpublished (already released) error";
 }
 
 TEST_F(Given_a_4_batch_buffer, _when_release_is_called_out_of_order) {
-	brb_batch * batch1 = brb_claim(buffer, 1, &cancel);
-	brb_batch * batch2 = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch1;
+	brb_batch * batch2;
+
+	brb_claim(buffer, &batch1, 1, &cancel);
+	brb_claim(buffer, &batch2, 1, &cancel);
 
 	brb_publish(buffer, batch2);
-	brb_release(buffer, batch2);
 
-	EXPECT_EQ(BRB_RELEASE_OVERFLOW, errno) << "then it should return a release overflow error";
+	result = brb_release(buffer, batch2);
+
+	EXPECT_EQ(BRB_RELEASE_OVERFLOW, result) << "then it should return a release overflow error";
 }
 
 TEST_F(Given_a_4_batch_buffer, _when_claiming_batches_that_were_previously_released) {
-	brb_batch * batch1 = brb_claim(buffer, 1, &cancel);
-	brb_batch * batch2 = brb_claim(buffer, 1, &cancel);
-	brb_batch * batch3 = brb_claim(buffer, 1, &cancel);
-	brb_batch * batch4 = brb_claim(buffer, 1, &cancel);
+	brb_batch * batch1;
+	brb_batch * batch2;
+	brb_batch * batch3;
+	brb_batch * batch4;
+	brb_batch * batch5;
+
+	brb_claim(buffer, &batch1, 1, &cancel);
+	brb_claim(buffer, &batch2, 1, &cancel);
+	brb_claim(buffer, &batch3, 1, &cancel);
+	brb_claim(buffer, &batch4, 1, &cancel);
+
 	/* Buffer should be fully allocated now so without releasing, next claim will block */
 
 	brb_publish(buffer, batch1);
 	brb_release(buffer, batch1);
 
 	/* Need to figure out how to make sure this doesn't hang the tests */
-	brb_batch * batch5 = brb_claim(buffer, 1, &cancel);
+	result = brb_claim(buffer, &batch5, 1, &cancel);
 
-
+	EXPECT_EQ(BRB_SUCCESS, result) << "then it should allow a fifth claim";
 }
 
 
