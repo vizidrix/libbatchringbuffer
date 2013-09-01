@@ -17,7 +17,10 @@
  *
  ****************************************************************************/
 
-#define SLEEPNS(nsec) 														\
+#define likely(condition) __builtin_expect(!!(condition), 1)
+#define unlikely(condition) __builtin_expect(!!(condition), 0)
+
+#define sleepns(nsec) 														\
 	if (0 < nsec && nsec < 9999999L) {										\
 		struct timespec ts;													\
 		ts.tv_sec = 0;														\
@@ -123,14 +126,214 @@ brb_init_buffer(struct brb_buffer** buffer_ptr, uint64_t batch_buffer_size, uint
 }
 
 int
-brb_free_buffer(struct brb_buffer * buffer) {
-	if(buffer != NULL) {
-		free(buffer->data_buffer);
-		free(buffer->batches);
-		buffer=(free(buffer),NULL);
+brb_free_buffer(struct brb_buffer ** buffer) {
+	if(*buffer != NULL) {
+		free((*buffer)->data_buffer);
+		free((*buffer)->batches);
+		(*buffer)=(free(*buffer),NULL);
 	}
 	return BRB_SUCCESS;
 }
+
+int /* Publish is not guaranteed to be sequential */
+brb_publish(brb_buffer * buffer, brb_batch * batch) {
+	uint64_t index;
+
+	batch->state = PUBLISHED;
+	/*BARRIER(); */
+	if(batch->batch_num != buffer->stats.read_batch_num) {
+		return BRB_SUCCESS; /* All done here */
+	}
+	index = batch->batch_num;
+	do {
+		/* Scan across all batches starting at the next slot looking for other published batches */
+		while(buffer->batches[(++index) & buffer->info.batch_size_mask].state == PUBLISHED) {}
+		/* While loop overshoots by one... but this pointer should point to the oldest publish? */
+		__sync_bool_compare_and_swap(&buffer->stats.read_batch_num, batch->batch_num, index);
+	/* Handle a potential edge case where the next batch was published and returned in between
+	 	the prev while and the CAS.  Should be very rare, if ever */
+	} while(buffer->batches[(index) & buffer->info.batch_size_mask].state == PUBLISHED);
+	return BRB_SUCCESS;
+}
+
+int
+brb_release(brb_buffer * buffer, brb_batch * batch) {
+	if(batch->state != PUBLISHED) {
+		return BRB_RELEASE_UNPUBLISHED;
+	}
+	if(batch->batch_num >= buffer->stats.read_batch_num) {
+		return BRB_RELEASE_OVERFLOW;
+	}
+	brb_reset_batch(batch);
+
+	__sync_add_and_fetch(&buffer->stats.barrier_batch_num, 1);
+	return BRB_SUCCESS;
+}
+
+int
+brb_claim(brb_buffer * buffer, brb_batch ** batch, uint16_t count, void* cancel) {
+	uint64_t index;
+
+	if(count == 0 || count > buffer->info.data_buffer_size) {
+		return BRB_CLAIM_PANIC;
+	} /* Must be > 0 and < buffer size */
+	index = buffer->stats.write_batch_num;
+	/* Scan forward trying to put your count in the slot first */
+	/*DebugPrint("%d >= (%d + %d)", index, buffer->stats.barrier_batch_num, buffer->info.batch_buffer_size);*/
+	while(unlikely(index >= (buffer->stats.barrier_batch_num + buffer->info.batch_buffer_size)) ||
+		!__sync_bool_compare_and_swap(&buffer->batches[index++ & buffer->info.batch_size_mask].batch_size, 0, count)) {
+		sched_yield();
+		sleepns(1000L);
+
+		if(unlikely(cancel == NULL)) { return BRB_CLAIM_CANCELED; }
+	}
+	/* Increment the starting spot for the next claim */
+	__sync_add_and_fetch(&buffer->stats.write_batch_num, 1);
+
+	index--; /* Loop causes the index to overshoot by 1 */
+	buffer->batches[index & buffer->info.batch_size_mask].batch_num = index;
+	buffer->batches[index & buffer->info.batch_size_mask].state = WRITING;
+
+	/*
+	//uint64_t seq_num = 0;
+	//uint64_t prev_count = 0;
+
+
+	// Look backwards looking for a previously assigned seq num
+	// Count batch size along the way for a running offset
+	// If you reach the Barrier_Buf_Num then use
+	//while()
+	// Fake reader releases
+	//__sync_add_and_fetch(&buffer->stats.barrier_batch_num, 1);
+	//buffer->stats.barrier_batch_num++;
+	*/
+
+	*batch = &buffer->batches[index & buffer->info.batch_size_mask];
+	return BRB_SUCCESS;
+}
+
+int
+brb_get_batch(brb_buffer * buffer, brb_batch ** batch, uint64_t batch_num) {
+	*batch = &buffer->batches[batch_num & buffer->info.batch_size_mask];
+	return BRB_SUCCESS;
+}
+
+int
+brb_get_entry(brb_buffer * buffer, void ** entry, uint64_t seq_num) {
+	*entry = &buffer->data_buffer[seq_num & buffer->info.data_size_mask];
+	return BRB_SUCCESS;
+}
+
+int
+brb_get_info(brb_buffer * buffer, brb_buffer_info ** info) {
+	*info = &buffer->info;
+	return BRB_SUCCESS;
+}
+
+int
+brb_get_stats(brb_buffer * buffer, brb_buffer_stats ** stats) {
+	*stats = &buffer->stats;
+	return BRB_SUCCESS;
+}
+
+int
+brb_print_info(brb_buffer * buffer) {
+	printf("C Info - Batch# [ %" PRIu64 " ] Data# [ %" PRIu64 " ] Entry# [ %" PRIu64 " ] - Entry Buffer# [ %" PRIu64 " ]",
+			buffer->info.batch_buffer_size,
+			buffer->info.data_buffer_size,
+			buffer->info.entry_size,
+			buffer->info.total_data_size);
+	return BRB_SUCCESS;
+}
+
+int
+brb_print_stats(brb_buffer * buffer) {
+	printf("C Stats - Batch [ B %" PRIu64 " | R %" PRIu64 " | W %" PRIu64 " ] Seq [ B %" PRIu64 " | W %" PRIu64 " ]",
+			buffer->stats.barrier_batch_num,
+			buffer->stats.read_batch_num,
+			buffer->stats.write_batch_num,
+			buffer->stats.barrier_seq_num,
+			buffer->stats.write_seq_num);
+	return BRB_SUCCESS;
+}
+
+int
+brb_print_buffer(brb_buffer * buffer) {
+	printf("Buffer - Info | Stats | Batches | Data");
+	brb_print_info(buffer);
+	brb_print_stats(buffer);
+	return BRB_SUCCESS;
+}
+
+
+/*
+rb_process(buffer);
+
+rb_batch * batch = &buffer->batches[(index-1) & buffer->info->batch_size_mask];
+
+// TODO: Return the batch and let the caller decide how to wait
+retries = 0;
+// What happens if a claimed slot is abandoned by the writer?
+// Spin wait until the buffer process has allocated a seq_num for the batch
+while((*batch).seq_num == 0xFFFFFFFF) {
+	retries++;
+	if(retries > 10) {
+		__errno(RB_CLAIM_FULL);
+		DebugPrint("Retries exceeded");
+		goto error;
+	}
+}
+DebugPrint("Claim seq_num: %d - size: %d", (*batch).seq_num, (*batch).batch_size);
+//DebugPrint("after Index: %d", index-1);
+//DebugPrint("after Value: %d", buffer->batches[index-1].batch_size);
+*/
+/*
+// batch num update should be done by buffer process as it allocates
+
+
+
+//batch->seq_num = buffer->stats->write_seq_num;
+
+//buffer->stats->write_seq_num += count;
+*/
+
+/*
+void
+rb_publish(rb_buffer * buffer, rb_batch * batch) {
+	buffer->stats->write_barrier+=batch->batch_size;
+
+	// REMOVE THIS - Simulates readers immediately consuming
+	buffer->stats->read_barrier+=batch->batch_size;
+	buffer->stats->read_seq_num+=batch->batch_size;
+
+
+	__errno(RB_SUCCESS);
+	return;
+error:
+	__errno(RB_ERROR);
+}
+*/
+
+/*
+void rb_claim_and_publish(rb_buffer * buffer, int count) {
+	int i = 0;
+	for(i = 0; i < count; i++) {
+		rb_batch * batch = rb_claim(buffer, 1);
+		char * entry = (char *)rb_get_entry(buffer, batch->seq_num);
+		//char[] data = { 1, 2 };
+		//rb_publish(buffer, batch);
+		rb_publish(batch);
+	}
+}
+*/
+/*
+// Reader needs to notify when it's barrier is updated
+// and be notified when it's next seq_num is avail
+// i.e. holds a range 'lock' from barrier to seq_num
+*/
+
+
+
 
 /* WIP - Working to move the responsibility of managing these points into the callers
 			so these funcs will likely be deprecated...
@@ -213,199 +416,3 @@ error:
 	return result;
 }
 */
-
-int /* Publish is not guaranteed to be sequential */
-brb_publish(brb_buffer * buffer, brb_batch * batch) {
-	uint64_t index;
-
-	batch->state = PUBLISHED;
-	/*BARRIER(); */
-	if(batch->batch_num != buffer->stats.read_batch_num) {
-		return BRB_SUCCESS; /* All done here */
-	}
-	index = batch->batch_num;
-	do {
-		/* Scan across all batches starting at the next slot looking for other published batches */
-		while(buffer->batches[(++index) & buffer->info.batch_size_mask].state == PUBLISHED) {}
-		/* While loop overshoots by one... but this pointer should point to the oldest publish? */
-		__sync_bool_compare_and_swap(&buffer->stats.read_batch_num, batch->batch_num, index);
-	/* Handle a potential edge case where the next batch was published and returned in between
-	 	the prev while and the CAS.  Should be very rare, if ever */
-	} while(buffer->batches[(index) & buffer->info.batch_size_mask].state == PUBLISHED);
-	return BRB_SUCCESS;
-}
-
-int
-brb_release(brb_buffer * buffer, brb_batch * batch) {
-	if(batch->state != PUBLISHED) {
-		return BRB_RELEASE_UNPUBLISHED;
-	}
-	if(batch->batch_num >= buffer->stats.read_batch_num) {
-		return BRB_RELEASE_OVERFLOW;
-	}
-	brb_reset_batch(batch);
-
-	__sync_add_and_fetch(&buffer->stats.barrier_batch_num, 1);
-	return BRB_SUCCESS;
-}
-
-
-int
-brb_claim(brb_buffer * buffer, brb_batch ** batch, uint16_t count, void* cancel) {
-	uint64_t index;
-
-	if(count == 0 || count > buffer->info.data_buffer_size) {
-		return BRB_CLAIM_PANIC;
-	} /* Must be > 0 and < buffer size */
-	index = buffer->stats.write_batch_num;
-	/* Scan forward trying to put your count in the slot first */
-	/*DebugPrint("%d >= (%d + %d)", index, buffer->stats.barrier_batch_num, buffer->info.batch_buffer_size);*/
-	while(__builtin_expect(index >= (buffer->stats.barrier_batch_num + buffer->info.batch_buffer_size), 0) ||
-		!__sync_bool_compare_and_swap(&buffer->batches[index++ & buffer->info.batch_size_mask].batch_size, 0, count)) {
-		sched_yield();
-		SLEEPNS(1000L);
-
-		if(__builtin_expect(cancel == NULL, 0)) { return BRB_CLAIM_CANCELED; }
-	}
-	/* Increment the starting spot for the next claim */
-	__sync_add_and_fetch(&buffer->stats.write_batch_num, 1);
-
-	index--; /* Loop causes the index to overshoot by 1 */
-	buffer->batches[index & buffer->info.batch_size_mask].batch_num = index;
-	buffer->batches[index & buffer->info.batch_size_mask].state = WRITING;
-
-	/*
-	//uint64_t seq_num = 0;
-	//uint64_t prev_count = 0;
-
-
-	// Look backwards looking for a previously assigned seq num
-	// Count batch size along the way for a running offset
-	// If you reach the Barrier_Buf_Num then use
-	//while()
-	// Fake reader releases
-	//__sync_add_and_fetch(&buffer->stats.barrier_batch_num, 1);
-	//buffer->stats.barrier_batch_num++;
-	*/
-
-	*batch = &buffer->batches[index & buffer->info.batch_size_mask];
-	return BRB_SUCCESS;
-	/*
-	rb_process(buffer);
-
-	rb_batch * batch = &buffer->batches[(index-1) & buffer->info->batch_size_mask];
-
-	// TODO: Return the batch and let the caller decide how to wait
-	retries = 0;
-	// What happens if a claimed slot is abandoned by the writer?
-	// Spin wait until the buffer process has allocated a seq_num for the batch
-	while((*batch).seq_num == 0xFFFFFFFF) {
-		retries++;
-		if(retries > 10) {
-			__errno(RB_CLAIM_FULL);
-			DebugPrint("Retries exceeded");
-			goto error;
-		}
-	}
-	DebugPrint("Claim seq_num: %d - size: %d", (*batch).seq_num, (*batch).batch_size);
-	//DebugPrint("after Index: %d", index-1);
-	//DebugPrint("after Value: %d", buffer->batches[index-1].batch_size);
-	*/
-	/*
-	// batch num update should be done by buffer process as it allocates
-
-	
-
-	//batch->seq_num = buffer->stats->write_seq_num;
-	
-	//buffer->stats->write_seq_num += count;
-	*/
-}
-
-int
-brb_get_batch(brb_buffer * buffer, brb_batch ** batch, uint64_t batch_num) {
-	*batch = &buffer->batches[batch_num & buffer->info.batch_size_mask];
-	return BRB_SUCCESS;
-}
-
-int
-brb_get_entry(brb_buffer * buffer, void ** entry, uint64_t seq_num) {
-	*entry = &buffer->data_buffer[seq_num & buffer->info.data_size_mask];
-	return BRB_SUCCESS;
-}
-
-/*
-void
-rb_publish(rb_buffer * buffer, rb_batch * batch) {
-	buffer->stats->write_barrier+=batch->batch_size;
-
-	// REMOVE THIS - Simulates readers immediately consuming
-	buffer->stats->read_barrier+=batch->batch_size;
-	buffer->stats->read_seq_num+=batch->batch_size;
-
-
-	__errno(RB_SUCCESS);
-	return;
-error:
-	__errno(RB_ERROR);
-}
-*/
-
-/*
-void rb_claim_and_publish(rb_buffer * buffer, int count) {
-	int i = 0;
-	for(i = 0; i < count; i++) {
-		rb_batch * batch = rb_claim(buffer, 1);
-		char * entry = (char *)rb_get_entry(buffer, batch->seq_num);
-		//char[] data = { 1, 2 };
-		//rb_publish(buffer, batch);
-		rb_publish(batch);
-	}
-}
-*/
-/*
-// Reader needs to notify when it's barrier is updated
-// and be notified when it's next seq_num is avail
-// i.e. holds a range 'lock' from barrier to seq_num
-*/
-
-int
-brb_get_info(brb_buffer * buffer, brb_buffer_info ** info) {
-	*info = &buffer->info;
-	return BRB_SUCCESS;
-}
-
-int
-brb_get_stats(brb_buffer * buffer, brb_buffer_stats ** stats) {
-	*stats = &buffer->stats;
-	return BRB_SUCCESS;
-}
-
-int
-brb_print_info(brb_buffer * buffer) {
-	printf("C Info - Batch# [ %" PRIu64 " ] Data# [ %" PRIu64 " ] Entry# [ %" PRIu64 " ] - Entry Buffer# [ %" PRIu64 " ]",
-			buffer->info.batch_buffer_size,
-			buffer->info.data_buffer_size,
-			buffer->info.entry_size,
-			buffer->info.total_data_size);
-	return BRB_SUCCESS;
-}
-
-int
-brb_print_stats(brb_buffer * buffer) {
-	printf("C Stats - Batch [ B %" PRIu64 " | R %" PRIu64 " | W %" PRIu64 " ] Seq [ B %" PRIu64 " | W %" PRIu64 " ]",
-			buffer->stats.barrier_batch_num,
-			buffer->stats.read_batch_num,
-			buffer->stats.write_batch_num,
-			buffer->stats.barrier_seq_num,
-			buffer->stats.write_seq_num);
-	return BRB_SUCCESS;
-}
-
-int
-brb_print_buffer(brb_buffer * buffer) {
-	printf("Buffer - Info | Stats | Batches | Data");
-	brb_print_info(buffer);
-	brb_print_stats(buffer);
-	return BRB_SUCCESS;
-}

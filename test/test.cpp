@@ -1,5 +1,7 @@
-#include <test/given_a_4_4_4_batch_ring_buffer.hpp>
-#include <test/libbatchringbuffer_test.hpp>
+#include <test/given_no_state.hpp>
+#include <test/given_a_4_batch_buffer.hpp>
+#include <test/bench.hpp>
+
 #include "gtest/gtest.h"
 
 using ::testing::EmptyTestEventListener;

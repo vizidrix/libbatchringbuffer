@@ -20,7 +20,7 @@ protected:
 	virtual void TearDown() {
 		cancel = 0;
 		result = 0;
-		brb_free_buffer(buffer);
+		brb_free_buffer(&buffer);
 	}
 };
 
@@ -37,7 +37,7 @@ TEST_F(Given_a_4_batch_buffer, _when_a_claim_size_bigger_than_the_buffer_is_requ
 
 	result = brb_claim(buffer, &batch, 5, &cancel);
 
-	EXPECT_EQ(BRB_CLAIM_PANIC, result) << "then it should have returned an error";
+	EXPECT_EQ(BRB_CLAIM_PANIC, result) << "then it should have returned a claim panic error";
 }
 
 TEST_F(Given_a_4_batch_buffer, _when_a_valid_single_claim_is_requested) {

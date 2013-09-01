@@ -99,7 +99,7 @@ typedef struct brb_buffer brb_buffer;
 extern int brb_reset_batch(brb_batch * batch);
 
 extern int brb_init_buffer(brb_buffer ** buffer_ptr, uint64_t batch_buffer_size, uint64_t data_buffer_size, uint64_t data_size);
-extern int brb_free_buffer(brb_buffer * buffer);
+extern int brb_free_buffer(brb_buffer ** buffer_ptr);
 
 extern int brb_get_batch(brb_buffer * buffer, brb_batch ** batch, uint64_t batch_num);
 extern int brb_get_entry(brb_buffer * buffer, void ** entry, uint64_t seq_num);

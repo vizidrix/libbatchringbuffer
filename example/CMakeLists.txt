@@ -1,6 +1,6 @@
 set(TITLE example_c)
 
-set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -pthread -D_REENTRANT -fPIC" )
+set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -pg -pthread -D_REENTRANT -fPIC" )
 
 set(SOURCES example.c)
 
