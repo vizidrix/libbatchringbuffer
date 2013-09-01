@@ -2,13 +2,13 @@
 #include <stddef.h>
 #include <stdio.h>
 
-void batch_example() {
-	printf("init -> claim -> publish -> release -> free\n");
-
+void batch_example() {}
 	brb_buffer * buffer;
 	brb_batch * batch;
 	char cancel;
 
+	printf("init -> claim -> publish -> release -> free\n");
+	
 	brb_init_buffer(&buffer, 4, 4, 1024);
 	brb_claim(buffer, &batch, 1, &cancel);
 	brb_publish(buffer, batch);
