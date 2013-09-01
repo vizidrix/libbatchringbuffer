@@ -1,6 +1,7 @@
 #pragma once
 #include <src/batchringbuffer.h>
 
+#include <iostream>
 #include <time.h>
 #include <sys/time.h>
 
