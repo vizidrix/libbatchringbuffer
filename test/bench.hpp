@@ -81,7 +81,7 @@ TEST_F(Bench_4_4_1024_buffer, _claim_publish_release) {
 	int count;
 	/* warmup */
 	bench(1000);
-	for(count = 1000; count <= 10000000; count *= 10) {
+	for(count = 1000; count <= 1000000; count *= 10) {
 		ns_per_op = bench(count);
 		ops_per_ms = MILLIS / ns_per_op;
 		ops_per_s = NANOS / ns_per_op;
