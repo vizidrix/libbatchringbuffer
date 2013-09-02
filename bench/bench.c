@@ -73,13 +73,15 @@ int main() {
 	double ops_per_ms;
 	double ops_per_s;
 	int count;
+	printf("\nbench.c - main()\n\n\n");
 	/* warmup */
 	bench(1000);
-	for(count = 10000; count <= 1000000; count *= 10) {
+	for(count = 1000; count <= 1000000; count *= 10) {
 		ns_per_op = bench(count);
 		ops_per_ms = MILLIS / ns_per_op;
 		ops_per_s = NANOS / ns_per_op;
 		printf("[%10d]\t%8.4f ns/op\t\t%12.4f op/ms\t\t%12.4f op/s\n", count, ns_per_op, ops_per_ms, ops_per_s);
 	}
+	printf("\n\n/ bench.c - main()\n\n");
 	return 0;
 }
