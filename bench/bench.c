@@ -9,7 +9,7 @@
 #include <mach/mach.h>
 #else
 /*#include <iostream>*/
-using namespace std;
+/*using namespace std;*/
 #endif
 
 #define MILLIS 1000000LL
@@ -52,10 +52,11 @@ bench(int n)
 	brb_buffer * buffer;
 	brb_batch * batch;
 	char cancel;
+	int i;
 
 	brb_init_buffer(&buffer, 4, 4, 1024);
 	get_timespec(&time1);
-	for (int i = 0; i< n; i++) {
+	for (i = 0; i< n; i++) {
 		
 		brb_claim(buffer, &batch, 1, &cancel);
 		brb_publish(buffer, batch);
@@ -80,4 +81,5 @@ int main() {
 		ops_per_s = NANOS / ns_per_op;
 		printf("[%10d]\t%8.4f ns/op\t\t%12.4f op/ms\t\t%12.4f op/s\n", count, ns_per_op, ops_per_ms, ops_per_s);
 	}
+	return 0;
 }
