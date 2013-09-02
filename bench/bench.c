@@ -1,5 +1,6 @@
 #include <src/batchringbuffer.h>
 
+#include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
 
