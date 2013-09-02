@@ -5,6 +5,8 @@
 #include <time.h>
 #include <sys/time.h>
 
+using namespace std;
+
 #include <gtest/gtest.h>
 
 #ifdef __MACH__
