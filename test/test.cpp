@@ -1,6 +1,9 @@
 #include <test/given_no_state.hpp>
 #include <test/given_a_4_batch_buffer.hpp>
+
+#ifdef BENCH
 #include <test/bench.hpp>
+#endif
 
 #include "gtest/gtest.h"
 

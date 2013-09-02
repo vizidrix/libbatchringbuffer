@@ -5,13 +5,13 @@
 #include <time.h>
 #include <sys/time.h>
 
-using namespace std;
-
 #include <gtest/gtest.h>
 
 #ifdef __MACH__
 #include <mach/clock.h>
 #include <mach/mach.h>
+#else
+using namespace std;
 #endif
 
 #define MILLIS 1000000LL
