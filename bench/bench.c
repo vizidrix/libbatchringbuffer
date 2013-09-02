@@ -12,8 +12,8 @@
 /*using namespace std;*/
 #endif
 
-#define MILLIS 1000000LL
-#define NANOS 1000000000LL
+#define MILLIS 1000000L
+#define NANOS 1000000000L
 
 struct timespec
 diff(struct timespec start, struct timespec end) {
