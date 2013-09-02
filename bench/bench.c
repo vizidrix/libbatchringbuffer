@@ -1,30 +1,22 @@
-#pragma once
 #include <src/batchringbuffer.h>
 
-#include <iostream>
 #include <time.h>
 #include <sys/time.h>
-
-#include <gtest/gtest.h>
 
 #ifdef __MACH__
 #include <mach/clock.h>
 #include <mach/mach.h>
 #else
+#include <iostream>
 using namespace std;
 #endif
 
 #define MILLIS 1000000LL
 #define NANOS 1000000000LL
 
-class Bench_4_4_1024_buffer : public testing::Test {
-protected:
-	brb_buffer * buffer;
-};
-
-timespec
-diff(timespec start, timespec end) {
-	timespec temp;
+struct timespec
+diff(struct timespec start, struct timespec end) {
+	struct timespec temp;
 	if ((end.tv_nsec-start.tv_nsec)<0) {
 		temp.tv_sec = end.tv_sec-start.tv_sec-1;
 		temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
@@ -36,7 +28,7 @@ diff(timespec start, timespec end) {
 }
 
 void
-get_timespec(timespec * ts) {
+get_timespec(struct timespec * ts) {
 #ifdef __MACH__ /* OS X does not have clock_gettime, use clock_get_time */
 	clock_serv_t cclock;
 	mach_timespec_t mts;
@@ -54,7 +46,7 @@ get_timespec(timespec * ts) {
 double
 bench(int n)
 {
-	timespec time1, time2;
+	struct timespec time1, time2;
 	
 	brb_buffer * buffer;
 	brb_batch * batch;
@@ -74,7 +66,7 @@ bench(int n)
 	return (double)diff(time1,time2).tv_nsec / (double)n;
 }
 
-TEST_F(Bench_4_4_1024_buffer, _claim_publish_release) {
+int main() {
 	double ns_per_op;
 	double ops_per_ms;
 	double ops_per_s;

@@ -16,6 +16,7 @@ cmake -DCMAKE_BUILD_TYPE=Release ./
 make
 make test
 ./bin/libbatchringbuffer_test
+./bin/bench_c
 
 echo "Valgrind - libbatchringbuffer tests"
 
