@@ -1,6 +1,7 @@
-#include <test/given_no_state.hpp>
-#include <test/given_a_4_batch_buffer.hpp>
-
+/*#include <test/given_no_state.hpp>
+#include <test/given_a_4_batch_buffer.hpp>*/
+#include <test/given_a_ringbuffer_pointer.hpp>
+#include <test/given_a_size_4_ringbuffer.hpp>
 /*
 #ifdef BENCH
 #include <test/bench.hpp>
@@ -63,21 +64,6 @@ class TersePrinter : public EmptyTestEventListener {
   }
 };  // class TersePrinter
 
-/*
-TEST(CustomOutputTest, PrintsMessage) {
-  printf("Printing something from the test body...\n");
-}
-
-TEST(CustomOutputTest, Succeeds) {
-  SUCCEED() << "SUCCEED() has been invoked from here";
-}
-
-TEST(CustomOutputTest, Fails) {
-  EXPECT_EQ(1, 2)
-      << "This test fails in order to demonstrate alternative failure messages";
-}
-*/
-
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -133,3 +119,4 @@ int main(int argc, char **argv) {
 
   return ret_val;
 }
+

@@ -13,8 +13,9 @@ set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pedantic-errors -Wall -pedantic -Wextra
 
 include_directories(${LIBBATCHRINGBUFFER_SRC_ROOT})
 add_subdirectory(src)
-add_subdirectory(example)
-add_subdirectory(bench)
+#add_subdirectory(example)
+#add_subdirectory(bench)
+
 
 find_package(GTest)
 find_package(Threads)

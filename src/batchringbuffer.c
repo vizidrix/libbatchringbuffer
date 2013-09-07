@@ -7,71 +7,27 @@
 #include <inttypes.h>
 
 #include "batchringbuffer.h"
+#include "lockfree_helpers.h"
+#include "ringbuffer.h"
 
 /*#include <xmmintrin.h> // SIMD */
 /*http://gcc.gnu.org/onlinedocs/gcc-4.1.2/gcc/Atomic-Builtins.html */
 
-/****************************************************************************
- *
- *		Helper Methods
- *
- ****************************************************************************/
-
-#define likely(condition) __builtin_expect(!!(condition), 1)
-#define unlikely(condition) __builtin_expect(!!(condition), 0)
-
-#define sleepns(nsec) 														\
-	if (0 < nsec && nsec < 9999999L) {										\
-		struct timespec ts;													\
-		ts.tv_sec = 0;														\
-		ts.tv_nsec = nsec;													\
-		nanosleep(&ts, (struct timespec *) NULL);							\
-	}
-	
-uint64_t round_up_pow_2_uint64_t(uint64_t v) {
-	v--;
-	v |= v >> 1;
-	v |= v >> 2;
-	v |= v >> 4;
-	v |= v >> 8;
-	v |= v >> 16;
-	v |= v >> 32;
-	v++;
-	return v;
-}
-
-/* Compiler barrier to avoid rearranging of calls */
-#define BARRIER() { asm volatile("" ::: "memory"); }
-
-/****************************************************************************
- *
- *		/ Helper Methods
- *
- ****************************************************************************/
-
 struct brb_buffer {
-	struct brb_buffer_info		info;			/** < Holds buffer settings */
-	struct brb_buffer_stats		stats;			/** < Holds buffer allocation details */
-	brb_batch *					batches;
-	uint8_t *					data_buffer;
+	uint64_t		size;			/** < Number of slots allocated for use in tracking batches */
+	uint64_t		mask;			/** < Batch buffer size - 1; Used to keep batches inside the ring */
+	brb_batch *			batches;
+	rb_buffer *			ring_buffer;	/** < Pointer to the ring buffer this allocator is managing */
+
+	volatile uint64_t	barrier_batch_num 	____cacheline_aligned;	/** < Index of the oldest batch that is still in use by at least one reader */
+	volatile uint64_t	read_batch_num 		____cacheline_aligned;	/** < Index of the newest batch which has been released to readers */
+	volatile uint64_t	write_batch_num 	____cacheline_aligned;	/** < Index of the next available batch to be assigned to a writer */
+	volatile uint64_t	barrier_seq_num 	____cacheline_aligned;	/** < Index of the oldest seq num that is still held by at least one reader (don't overflow) */
+	volatile uint64_t	write_seq_num 		____cacheline_aligned;	/** < Index of the next available entry for allocation to a batch */
 };
 
 int
-brb_reset_batch(struct brb_batch * batch) {
-	int i = 0;
-	for(; i < 8; i++) {
-		batch->reader_flags[i] = 0;
-	}
-	batch->state = AVAILABLE;
-	/* TODO: make these atomic? */
-	batch->group_flags = 0x00000000; /* Same as: no groups completed */
-	batch->seq_num = 0xFFFFFFFF; /* Buffer process should ignore 0xFFFFFFFF */
-	batch->batch_size = 0; /* On claim this will set to > 0 and seq_num == 0 */
-	return BRB_SUCCESS;
-}
-
-int
-brb_init_buffer(struct brb_buffer** buffer_ptr, uint64_t batch_buffer_size, uint64_t data_buffer_size, uint64_t entry_size) {
+brb_init(struct brb_buffer** buffer_ptr, uint64_t batch_buffer_size, uint64_t ring_buffer_size, uint64_t entry_size) {
 	uint64_t i = 0;
 
 	/* Allocate space to hold the buffer and info structs */
@@ -81,57 +37,80 @@ brb_init_buffer(struct brb_buffer** buffer_ptr, uint64_t batch_buffer_size, uint
 	}
 
 	batch_buffer_size = round_up_pow_2_uint64_t(batch_buffer_size);
-	data_buffer_size = round_up_pow_2_uint64_t(data_buffer_size);
+	//data_buffer_size = round_up_pow_2_uint64_t(data_buffer_size);
 	
 	/* Populate the info struct */
-	(*buffer_ptr)->info.batch_buffer_size = batch_buffer_size;
-	(*buffer_ptr)->info.batch_size_mask = batch_buffer_size - 1;
+	(*buffer_ptr)->size = batch_buffer_size;
+	(*buffer_ptr)->mask = batch_buffer_size - 1;
+	/*
 	(*buffer_ptr)->info.data_buffer_size = data_buffer_size;
 	(*buffer_ptr)->info.data_size_mask = data_buffer_size - 1;
 	(*buffer_ptr)->info.entry_size = entry_size;
 	(*buffer_ptr)->info.total_data_size = 
 		(*buffer_ptr)->info.data_buffer_size * 
 		(*buffer_ptr)->info.entry_size;
+	*/
+	rb_init(&(*buffer_ptr)->ring_buffer, ring_buffer_size, entry_size);
 
 	/* Populate the stats struct */
-	(*buffer_ptr)->stats.barrier_batch_num = 0;
-	(*buffer_ptr)->stats.read_batch_num = 0;
-	(*buffer_ptr)->stats.write_batch_num = 0;
-	(*buffer_ptr)->stats.barrier_seq_num = 0;
-	(*buffer_ptr)->stats.write_seq_num = 0;
+	(*buffer_ptr)->barrier_batch_num = 0;
+	(*buffer_ptr)->read_batch_num = 0;
+	(*buffer_ptr)->write_batch_num = 0;
+	(*buffer_ptr)->barrier_seq_num = 0;
+	(*buffer_ptr)->write_seq_num = 0;
 
 	/* Allocate a pool of batches to hold claimed set data */
-	(*buffer_ptr)->batches = malloc(sizeof(brb_batch) * (*buffer_ptr)->info.batch_buffer_size);
+	(*buffer_ptr)->batches = malloc(sizeof(brb_batch) * (*buffer_ptr)->size);
 	if(!(*buffer_ptr)->batches) {
 		free(*buffer_ptr);
 		return BRB_ALLOC_BATCHES;
 	}
-	for(i = 0; i < (*buffer_ptr)->info.batch_buffer_size; i++) {
+	for(i = 0; i < (*buffer_ptr)->size; i++) {
 		(*buffer_ptr)->batches[i].batch_num = 0;
-		brb_reset_batch(&(*buffer_ptr)->batches[i]);
+		brb_reset(&(*buffer_ptr)->batches[i]);
 	}
 	
 	/* Allocate giant contiguous byte array to hold the entries */
+	/* moving over to rb_init
 	(*buffer_ptr)->data_buffer = malloc((*buffer_ptr)->info.total_data_size);
 	if(!(*buffer_ptr)->data_buffer) {
 		free((*buffer_ptr)->batches);
 		free(*buffer_ptr);
 		return BRB_ALLOC_DATA;
 	}
+	*/
 	/* Flush the data buffer to all zeros */
+	/*
 	for (i = 0; i < (*buffer_ptr)->info.total_data_size; i++) {
 		(*buffer_ptr)->data_buffer[i] = 0;
+	}
+	*/
+	return BRB_SUCCESS;
+}
+
+int
+brb_free(struct brb_buffer ** buffer) {
+	if(*buffer != NULL) {
+		/*free((*buffer)->data_buffer);*/
+		rb_free(&(*buffer)->ring_buffer);
+		free((*buffer)->batches);
+		(*buffer)=(free(*buffer),NULL);
 	}
 	return BRB_SUCCESS;
 }
 
 int
-brb_free_buffer(struct brb_buffer ** buffer) {
-	if(*buffer != NULL) {
-		free((*buffer)->data_buffer);
-		free((*buffer)->batches);
-		(*buffer)=(free(*buffer),NULL);
-	}
+brb_reset(struct brb_batch * batch) {
+	batch->state = AVAILABLE;
+	/* TODO: make these atomic? */
+	batch->seq_num = 0xFFFFFFFF; /* Buffer process should ignore 0xFFFFFFFF */
+	batch->batch_size = 0; /* On claim this will set to > 0 and seq_num == 0 */
+	return BRB_SUCCESS;
+}
+
+int
+brb_get(brb_buffer * buffer, brb_batch ** batch, uint64_t batch_num) {
+	*batch = &buffer->batches[batch_num & buffer->mask];
 	return BRB_SUCCESS;
 }
 
@@ -141,18 +120,18 @@ brb_publish(brb_buffer * buffer, brb_batch * batch) {
 
 	batch->state = PUBLISHED;
 	/*BARRIER(); */
-	if(batch->batch_num != buffer->stats.read_batch_num) {
+	if(batch->batch_num != buffer->read_batch_num) {
 		return BRB_SUCCESS; /* All done here */
 	}
 	index = batch->batch_num;
 	do {
 		/* Scan across all batches starting at the next slot looking for other published batches */
-		while(buffer->batches[(++index) & buffer->info.batch_size_mask].state == PUBLISHED) {}
+		while(buffer->batches[(++index) & buffer->mask].state == PUBLISHED) {}
 		/* While loop overshoots by one... but this pointer should point to the oldest publish? */
-		__sync_bool_compare_and_swap(&buffer->stats.read_batch_num, batch->batch_num, index);
+		__sync_bool_compare_and_swap(&buffer->read_batch_num, batch->batch_num, index);
 	/* Handle a potential edge case where the next batch was published and returned in between
 	 	the prev while and the CAS.  Should be very rare, if ever */
-	} while(buffer->batches[(index) & buffer->info.batch_size_mask].state == PUBLISHED);
+	} while(buffer->batches[(index) & buffer->mask].state == PUBLISHED);
 	return BRB_SUCCESS;
 }
 
@@ -161,12 +140,12 @@ brb_release(brb_buffer * buffer, brb_batch * batch) {
 	if(batch->state != PUBLISHED) {
 		return BRB_RELEASE_UNPUBLISHED;
 	}
-	if(batch->batch_num >= buffer->stats.read_batch_num) {
+	if(batch->batch_num >= buffer->read_batch_num) {
 		return BRB_RELEASE_OVERFLOW;
 	}
-	brb_reset_batch(batch);
+	brb_reset(batch);
 
-	__sync_add_and_fetch(&buffer->stats.barrier_batch_num, 1);
+	__sync_add_and_fetch(&buffer->barrier_batch_num, 1);
 	return BRB_SUCCESS;
 }
 
@@ -174,25 +153,25 @@ int
 brb_claim(brb_buffer * buffer, brb_batch ** batch, uint16_t count, void* cancel) {
 	uint64_t index;
 
-	if(count == 0 || count > buffer->info.data_buffer_size) {
+	if(count == 0 || count > buffer->size) {
 		return BRB_CLAIM_PANIC;
 	} /* Must be > 0 and < buffer size */
-	index = buffer->stats.write_batch_num;
+	index = buffer->write_batch_num;
 	/* Scan forward trying to put your count in the slot first */
 	/*DebugPrint("%d >= (%d + %d)", index, buffer->stats.barrier_batch_num, buffer->info.batch_buffer_size);*/
-	while(unlikely(index >= (buffer->stats.barrier_batch_num + buffer->info.batch_buffer_size)) ||
-		!__sync_bool_compare_and_swap(&buffer->batches[index++ & buffer->info.batch_size_mask].batch_size, 0, count)) {
+	while(unlikely(index >= (buffer->barrier_batch_num + buffer->size)) ||
+		!__sync_bool_compare_and_swap(&buffer->batches[index++ & buffer->mask].batch_size, 0, count)) {
 		sched_yield();
 		sleepns(1000L);
 
 		if(unlikely(cancel == NULL)) { return BRB_CLAIM_CANCELED; }
 	}
 	/* Increment the starting spot for the next claim */
-	__sync_add_and_fetch(&buffer->stats.write_batch_num, 1);
+	__sync_add_and_fetch(&buffer->write_batch_num, 1);
 
 	index--; /* Loop causes the index to overshoot by 1 */
-	buffer->batches[index & buffer->info.batch_size_mask].batch_num = index;
-	buffer->batches[index & buffer->info.batch_size_mask].state = WRITING;
+	buffer->batches[index & buffer->mask].batch_num = index;
+	buffer->batches[index & buffer->mask].state = WRITING;
 
 	/*
 	//uint64_t seq_num = 0;
@@ -208,22 +187,11 @@ brb_claim(brb_buffer * buffer, brb_batch ** batch, uint16_t count, void* cancel)
 	//buffer->stats.barrier_batch_num++;
 	*/
 
-	*batch = &buffer->batches[index & buffer->info.batch_size_mask];
+	*batch = &buffer->batches[index & buffer->mask];
 	return BRB_SUCCESS;
 }
 
-int
-brb_get_batch(brb_buffer * buffer, brb_batch ** batch, uint64_t batch_num) {
-	*batch = &buffer->batches[batch_num & buffer->info.batch_size_mask];
-	return BRB_SUCCESS;
-}
-
-int
-brb_get_entry(brb_buffer * buffer, void ** entry, uint64_t seq_num) {
-	*entry = &buffer->data_buffer[seq_num & buffer->info.data_size_mask];
-	return BRB_SUCCESS;
-}
-
+/*
 int
 brb_get_info(brb_buffer * buffer, brb_buffer_info ** info) {
 	*info = &buffer->info;
@@ -264,6 +232,7 @@ brb_print_buffer(brb_buffer * buffer) {
 	brb_print_stats(buffer);
 	return BRB_SUCCESS;
 }
+*/
 
 
 /*

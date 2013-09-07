@@ -1,0 +1,38 @@
+#ifndef _BENCHMARK_H_
+#define _BENCHMARK_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stdarg.h>
+#include <stdlib.h>
+
+struct B B;
+
+struct BenchmarkResult {
+	int 		count;
+	uint64_t	ops_per_ns;
+	uint64_t	ops_per_ms;
+	uint64_t	ops_per_s;
+	uint64_t	s_duration;
+	uint64_t	s_mean;
+	uint64_t	s_median;
+	uint64_t	s_avg;
+	uint64_t	ns_duration;
+	uint64_t	ns_mean;
+	uint64_t	ns_median;
+	uint64_t	ns_avg;
+} BenchmarkResult;
+
+int b_reset_timer(B * b);
+int b_start_timer(B * b);
+int b_stop_timer(B *b);
+int b_exec_bench(BenchmarkResult * result, int count, char * key, void (*f)(B * b) run);
+int b_print_result(BenchmarkResult * result);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _BENCHMARK_H_ */

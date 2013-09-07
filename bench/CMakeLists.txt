@@ -1,8 +1,8 @@
-set(TITLE bench_c)
+set(TITLE benchmark_c)
 
 set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -pg -D_REENTRANT -fPIC" )
 
-set(SOURCES bench.c)
+set(SOURCES benchmark.c)
 
 add_executable(${TITLE} ${SOURCES})
 

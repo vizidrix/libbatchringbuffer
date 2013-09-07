@@ -1,0 +1,279 @@
+#include <src/ringbuffer.h>
+/*#include <src/batchringbuffer.h>*/
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <sys/time.h>
+
+#ifdef __MACH__
+#include <mach/clock.h>
+#include <mach/mach.h>
+#else
+/*#include <iostream>*/
+/*using namespace std;*/
+#endif
+
+#define MILLIS 1000000L
+#define NANOS 1000000000L
+
+#ifdef __MACH__
+
+#define INIT_CLOCK() clock_serv_t cclock; mach_timespec_t mts; host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+#define GET_TIMESPEC(timespec) clock_get_time(cclock, &mts); timespec.tv_sec = mts.tv_sec; timespec.tv_nsec = mts.tv_nsec;
+#define FREE_CLOCK() mach_port_deallocate(mach_task_self(), cclock);
+
+#else
+
+#define INIT_CLOCK()
+#define GET_TIMESPEC(timespec) clock_gettime(CLOCK_NONOTONIC, &timespec);
+#define FREE_CLOCK()
+
+#endif
+
+struct B {
+	int							n;
+	int 						running;
+	struct timespec 			start_time;
+	uint64_t					ns_duration;
+	void (*f)(struct B * b) 	bench_method;
+};
+
+void
+init_bench(B ** b, int n, char * key, void (*f)(B * b) bench_method) {
+	*b = malloc(sizeof(B));
+	(*b)->n = n;
+	(*b)->running = 0;
+	(*b)->bench_method = bench_method;
+}
+
+void
+free_bench(B ** b_ptr) {
+	if(*b_ptr != NULL) {
+		(*b_ptr)=(free(*b_ptr),NULL);
+	}
+}
+
+void
+run_bench(B * b, BenchmarkResult * result) {
+	int i;
+
+	INIT_CLOCK()
+
+	b_reset_timer(b);
+	b_start_timer(b);
+	b->bench_method(b);
+	b_stop_timer(b);
+
+	FREE_CLOCK()
+
+	*result.count = b->n;
+	*result.ops_per_ns = b->n;
+	*result.ops_per_ms = b->n;
+	*result.ops_per_s = b->n;
+	*result.s_duration = b->s_duration;
+	*result.s_mean = 0;
+	*result.s_median = 0;
+	*result.s_avg = 0;
+	*result.ns_duration = b->ns_duration;
+	*result.ns_mean = 0;
+	*result.ns_median = 0;
+	*result.ns_avg = 0;
+}
+
+void
+b_reset_timer(B * b) {
+	if(b->running) {
+		GET_TIMESPEC(b->start_time)
+	}
+	b->ns_duration = 0;
+}
+
+void
+b_start_timer(B * b) {
+	if(!b->running) {
+		GET_TIMESPEC(b->start_time)
+		b->running = 1;
+	}
+}
+
+void
+b_stop_timer(B *b) {
+	timespec 	end_time;
+	if(b->running) {
+		GET_TIMESPEC(b->end_time)
+		if ((end_time.tv_nsec - b->start_time.tv_nsec) < 0) {
+			printf("Invalid nsec\n");
+		}
+		b->s_duration += end_time.tv_sec - b->start_time.tv_sec;
+		b->ns_duration += end_time.tv_nsec - b->start_time.tv_nsec;
+		
+		b->running = 0;
+	}
+}
+
+BenchmarkResult
+b_exec_bench(int count, char * key, void (*f)(B * b) run) {
+	B b;
+	struct BenchmarkResult result;
+	init_bench(*b, 1000, "bench test", bench_test);
+	run_bench(*b, &result);
+	free_bench(*b);
+}
+
+void
+b_print_result(BenchmarkResult * result) {
+	printf("[%10d]\t%8.4f ns/op\t\t%12.4f op/ms\t\t%12.4f op/s\n",
+		result->count,
+		result->ns_per_op,
+		result->ops_per_ms,
+		result->ops_per_s);
+}
+
+void
+bench_test(B * b) {
+	rb_ringbuffer * buffer;
+	uint64_t seq_num;
+	//char * entry;
+	int i;
+	int result = 0;
+
+	//rb_init(&buffer);
+	b_reset_timer(b);
+
+	for(i = 0; i < n; i++) {
+		result = rb_init(&buffer, 4, 1024); if(result != RB_SUCCESS) { return result; }
+		result = rb_claim(buffer, &seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		result = rb_claim(buffer, &seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		result = rb_claim(buffer, &seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		assert(seq_num == 2);
+		//printf("\nseq_num: %lld", seq_num);
+		//result = rb_get(buffer, &entry, seq_num); if(result != RB_SUCCESS) { return result; }
+		//printf("\ne[0]: %d\n", entry[0]);
+		//memcpy(entry, src, 1024);
+		//result = rb_publish(buffer, seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		//result = rb_get(buffer, &entry, seq_num); if(result != RB_SUCCESS) { return result; }
+		//printf("\n\n\tGot data: %s\n\n", entry);
+		//result = rb_release(buffer, seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		result = rb_free(&buffer); if(result != RB_SUCCESS) { return result; }
+	}
+
+	b_stop_timer(b);
+
+	//rb_free(&b);
+}
+
+int
+main() {
+	b_print_result(b_exec_bench(1000, "bench test", bench_test));
+}
+
+/*
+
+struct timespec
+diff(struct timespec start, struct timespec end) {
+	struct timespec temp;
+	if ((end.tv_nsec-start.tv_nsec)<0) {
+		printf("Invalid nsec\n");
+		temp.tv_sec = end.tv_sec-start.tv_sec-1;
+		temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
+	} else {
+		temp.tv_sec = end.tv_sec-start.tv_sec;
+		temp.tv_nsec = end.tv_nsec-start.tv_nsec;
+	}
+	return temp;
+}
+
+*/
+/*
+int main1() {
+
+	double ns_per_op;
+	double ops_per_ms;
+	double ops_per_s;
+	int count;
+	printf("\nbench.c - main()\n\n\n");
+	/ warmup /
+	bench(100000); printf("\nDone warmup...\n\n");
+	for(count = 100000; count <= 1000000; count *= 10) {
+		ns_per_op = bench(count);
+		printf("\nns_per_op: %f\n", ns_per_op);
+		ops_per_ms = MILLIS / ns_per_op;
+		ops_per_s = NANOS / ns_per_op;
+		printf("[%10d]\t%8.4f ns/op\t\t%12.4f op/ms\t\t%12.4f op/s\n", count, ns_per_op, ops_per_ms, ops_per_s);
+	}
+	printf("\n\n/ bench.c - main()\n\n");
+	return 0;
+}
+*/
+
+/*
+void
+run_benchmark(void (*f)(uint64_t count))
+	struct timespec time1, time2;
+	rb_ringbuffer * buffer;
+	uint64_t seq_num;
+	//char * entry;
+	int i;
+	int result = 0;
+	//void * clock_impl;
+
+	INIT_CLOCK()
+
+	GET_TIMESPEC(time1)
+
+	/char * src = "data to put into the ring\n";/
+	
+	//get_timespec(&time1);
+	//for(i = 0; i < n; i++) {
+	for(i = 0; i < n; i++) {
+		result = rb_init(&buffer, 4, 1024); if(result != RB_SUCCESS) { return result; }
+		result = rb_claim(buffer, &seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		result = rb_claim(buffer, &seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		result = rb_claim(buffer, &seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		assert(seq_num == 2);
+		//printf("\nseq_num: %lld", seq_num);
+		//result = rb_get(buffer, &entry, seq_num); if(result != RB_SUCCESS) { return result; }
+		//printf("\ne[0]: %d\n", entry[0]);
+		//memcpy(entry, src, 1024);
+		//result = rb_publish(buffer, seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		//result = rb_get(buffer, &entry, seq_num); if(result != RB_SUCCESS) { return result; }
+		//printf("\n\n\tGot data: %s\n\n", entry);
+		//result = rb_release(buffer, seq_num, 1); if(result != RB_SUCCESS) { return result; }
+		result = rb_free(&buffer); if(result != RB_SUCCESS) { return result; }
+	}
+
+	GET_TIMESPEC(time2)
+
+	FREE_CLOCK()
+	//get_timespec(&time2);
+	
+	/
+	brb_buffer * buffer;
+	brb_batch * batch;
+	char cancel;
+	int i;
+
+	brb_init_buffer(&buffer, 4, 4, 1024);
+	get_timespec(&time1);
+	for (i = 0; i< n; i++) {
+		
+		brb_claim(buffer, &batch, 1, &cancel);
+		brb_publish(buffer, batch);
+		brb_release(buffer, batch);
+		
+	}
+	get_timespec(&time2);
+	brb_free_buffer(&buffer);
+	/
+	printf("\n\tsec1: %ld\n", time1.tv_sec);
+	printf("\ttime1: %ld\n", time1.tv_nsec);
+	printf("\tsec2: %ld\n", time2.tv_sec);
+	printf("\ttime2: %ld\n", time2.tv_nsec);
+	printf("\tn: %d\n", n);
+	return (double)diff(time1,time2).tv_nsec / (double)n;
+}
+*/
+
+
